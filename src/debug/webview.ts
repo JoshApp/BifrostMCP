@@ -1,6 +1,12 @@
-import { toolsDescriptions } from './tools';
-const onlyUriTools = ['get_semantic_tokens', 'get_document_symbols', 'get_code_lens', 'get_workspace_symbols'];
-const noUriTools = ['get_workspace_symbols'];
+import { toolsDescriptions } from "../toolManager";
+
+const onlyUriTools = [
+  "get_semantic_tokens",
+  "get_document_symbols",
+  "get_code_lens",
+  "get_workspace_symbols",
+];
+const noUriTools = ["get_workspace_symbols"];
 
 export const webviewHtml = `
     <!DOCTYPE html>
@@ -89,11 +95,15 @@ export const webviewHtml = `
         </style>
     </head>
     <body>
-        ${toolsDescriptions.map(tool => `
+        ${toolsDescriptions
+          .map(
+            (tool) => `
             <div class="tool-section">
                 <div class="tool-title">${tool.name}</div>
                 <div>${tool.description}</div>
-                ${!noUriTools.includes(tool.name) ? `
+                ${
+                  !noUriTools.includes(tool.name)
+                    ? `
                 <div class="autocomplete-container">
                     <div style="display: flex; align-items: center;">
                         <input type="text" id="uri-${tool.name}" class="file-input" placeholder="Start typing to search files..." style="flex: 1;">
@@ -101,26 +111,46 @@ export const webviewHtml = `
                     </div>
                     <div id="autocomplete-${tool.name}" class="autocomplete-list"></div>
                 </div>
-                ` : ''}
+                `
+                    : ""
+                }
                 <div class="tool-inputs">
-                    ${!onlyUriTools.includes(tool.name) ? `
+                    ${
+                      !onlyUriTools.includes(tool.name)
+                        ? `
                         <input type="number" id="line-${tool.name}" placeholder="Line number" style="width: 100px">
                         <input type="number" id="char-${tool.name}" placeholder="Character" style="width: 100px">
-                    ` : ''}
-                    ${tool.name === 'get_completions' ? `
+                    `
+                        : ""
+                    }
+                    ${
+                      tool.name === "get_completions"
+                        ? `
                         <input type="text" id="trigger-${tool.name}" placeholder="Trigger character" style="width: 50px" maxlength="1">
-                    ` : ''}
-                    ${tool.name === 'get_rename_locations' ? `
+                    `
+                        : ""
+                    }
+                    ${
+                      tool.name === "get_rename_locations"
+                        ? `
                         <input type="text" id="newname-${tool.name}" placeholder="New name" style="width: 150px">
-                    ` : ''}
-                    ${tool.name === 'get_workspace_symbols' ? `
+                    `
+                        : ""
+                    }
+                    ${
+                      tool.name === "get_workspace_symbols"
+                        ? `
                         <input type="text" id="query-${tool.name}" placeholder="Search symbols..." style="width: 200px">
-                    ` : ''}
+                    `
+                        : ""
+                    }
                 </div>
                 <button onclick="executeTool('${tool.name}')">Execute</button>
                 <pre id="result-${tool.name}">Results will appear here...</pre>
             </div>
-        `).join('')}
+        `
+          )
+          .join("")}
         <script>
             const vscode = acquireVsCodeApi();
             let workspaceFiles = [];

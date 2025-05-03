@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import { webviewHtml } from './webview';
-import { mcpServer } from './globals';
-import { runTool } from './toolRunner';
+import { BifrostServerManager } from '../BifrostServerManager';
+import { runTool } from '../toolManager';
+
 let debugPanel: vscode.WebviewPanel | undefined;
+
 export function createDebugPanel(context: vscode.ExtensionContext) {
     if (debugPanel) {
         debugPanel.reveal();
@@ -74,7 +76,7 @@ export function createDebugPanel(context: vscode.ExtensionContext) {
                 });
                 vscode.window.showInformationMessage('Please open a file in the editor to use this feature');
             }
-        } else if (message.command === 'execute' && mcpServer) {
+        } else if (message.command === 'execute' && BifrostServerManager.getInstance()) {
             try {
                 // Create a request handler function that matches our server's handlers
                 const handleRequest = async (request: { params: { name: string; arguments: any } }) => {
