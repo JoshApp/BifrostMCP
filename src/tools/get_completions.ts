@@ -45,8 +45,9 @@ export const get_completions: ToolDef<
   GetCompletionsArgs,
   GetCompletionsResult
 > = {
-  id: "get_completions",
-  description: "Provides intelligent code-completion suggestions based on the current context and cursor position.",
+  name: "get_completions",
+  description:
+    "Provides intelligent code-completion suggestions based on the current context and cursor position.",
   schema: z.object({
     textDocument: textDocumentSchema,
     position: positionSchema,

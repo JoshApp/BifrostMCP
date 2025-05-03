@@ -16,7 +16,10 @@ export async function getPreview(
   return lineText;
 }
 
-export function toVscodePosition(line: number, character: number): vscode.Position {
+export function toVscodePosition(
+  line: number,
+  character: number
+): vscode.Position {
   if (!line || !character) {
     throw new Error("toPosition: line/character undefined");
   }

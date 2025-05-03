@@ -19,11 +19,12 @@ import { get_declaration } from "./tools/get_declaration";
 import { get_type_hierarchy } from "./tools/get_type_hierarchy";
 import { get_semantic_tokens } from "./tools/get_semantic_tokens";
 import { get_call_hierarchy } from "./tools/get_call_hierarchy";
+import { Log } from "./core/log";
 
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { JSONSchema7 } from "json-schema";
 
-const outputChannel = vscode.window.createOutputChannel("BifrostMCP");
+const log = Log.getInstance();
 
 // All available tools
 const tools: (Omit<ToolDef<any, any>, "schema"> & {
@@ -50,26 +51,30 @@ const tools: (Omit<ToolDef<any, any>, "schema"> & {
 ];
 
 // Create a map for quick tool lookup
-const toolMap = new Map<string, ToolDef<any, any>>(
-  tools.map((tool) => [tool.id, tool])
+export const toolMap = new Map<string, ToolDef<any, any>>(
+  tools.map((tool) => [tool.name, tool])
 );
 
 // Generate tool definitions and descriptions
-export const mcpTools: ToolDefinition[] = tools.map(generateToolDefinition);
-export const toolsDescriptions: ToolDescription[] = mcpTools.map((tool) => ({
-  name: tool.name,
-  description: tool.description.split(".")[0], // Use first sentence as short description
-}));
+export const parsedMcpTools: ToolDefinition[] = tools.map(
+  generateToolDefinition
+);
+export const toolsDescriptions: ToolDescription[] = parsedMcpTools.map(
+  (tool) => ({
+    name: tool.name,
+    description: tool.description.split(".")[0], // Use first sentence as short description
+  })
+);
 
 // Tool execution
 export async function runTool(name: string, args: unknown) {
   const tool = toolMap.get(name);
   if (!tool) {
-    console.error(`Tool "${name}" not found`);
+    log.error(`Tool "${name}" not found`);
     throw new Error(`Unknown tool: ${name}`);
   }
 
-  console.log(`Running tool ${name} with args:`, args);
+  log.debug(`Running tool ${name} with args: ${JSON.stringify(args)}`);
   const parsed = (tool.schema as z.Schema<any>).parse(args);
 
   // Validate file existence if the tool requires a text document
@@ -83,24 +88,30 @@ export async function runTool(name: string, args: unknown) {
     try {
       await vscode.workspace.fs.stat(uri);
     } catch {
-      console.error(`File not found: ${uri.fsPath}`);
+      log.error(`File not found: ${uri.fsPath}`);
       throw new Error(`File not found: ${uri.fsPath}`);
     }
   }
 
   try {
     const result = await tool.run(parsed);
-    console.log(`Tool ${name} completed with result:`, result);
+    log.debug(`Tool ${name} completed with result: ${JSON.stringify(result)}`);
     return result;
   } catch (error) {
-    console.error(`Tool ${name} failed:`, error);
+    log.error(
+      `Tool ${name} failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
     throw error;
   }
 }
 
-function zodSchemaToJson(
-  schema: z.ZodTypeAny
-): { type: "object"; properties: Record<string, any>; required: string[] } {
+function zodSchemaToJson(schema: z.ZodTypeAny): {
+  type: "object";
+  properties: Record<string, any>;
+  required: string[];
+} {
   const json = zodToJsonSchema(schema, { target: "openAi" }) as any;
   // zod-to-json-schema returns a full OpenAPI schema object.
   // We only want the "properties/required" bit:
@@ -121,7 +132,7 @@ export function generateToolDefinition<TArgs extends z.ZodRawShape, TResult>(
 ): ToolDefinition {
   const json = zodSchemaToJson(tool.schema);
   return {
-    name: tool.id,
+    name: tool.name,
     description: tool.description || "",
     inputSchema: {
       type: json.type,
@@ -132,10 +143,10 @@ export function generateToolDefinition<TArgs extends z.ZodRawShape, TResult>(
 }
 
 // Debug logging to output channel
-outputChannel.appendLine("=== MCP Tools Generated ===");
-outputChannel.appendLine(JSON.stringify(mcpTools, null, 2));
-outputChannel.appendLine("\n=== MCP Tools Descriptions ===");
-outputChannel.appendLine(JSON.stringify(toolsDescriptions, null, 2));
-outputChannel.appendLine("\n");
+log.info("=== MCP Tools Generated ===");
+log.debug(JSON.stringify(parsedMcpTools, null, 2));
+log.info("=== MCP Tools Descriptions ===");
+log.debug(JSON.stringify(toolsDescriptions, null, 2));
+log.info("");
 
 export type RunToolResult = Awaited<ReturnType<typeof runTool>>;

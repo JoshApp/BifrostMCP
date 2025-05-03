@@ -29,7 +29,7 @@ const ConfigSchema = z
   })
   .strict();
 
-const log = new Log();
+const log = Log.getInstance();
 
 /** Read & validate bifrost.config.json or return defaults */
 export async function findBifrostConfig(
@@ -45,10 +45,7 @@ export async function findBifrostConfig(
   } catch (err: any) {
     // File missing → return defaults silently.
     if (err?.code === "FileNotFound" || err?.name === "FileSystemError") {
-      log.log(
-        "info",
-        `No bifrost.config.json in ${folder.name}; using defaults`
-      );
+      log.info(`No bifrost.config.json in ${folder.name}; using defaults`);
       return { ...DEFAULT_CONFIG };
     }
 
@@ -59,7 +56,7 @@ export async function findBifrostConfig(
           err.errors.map((e) => e.message).join(", ")
         : `Cannot read bifrost.config.json: ${err.message ?? err}`;
     vscode.window.showErrorMessage(message);
-    log.log("error", message);
+    log.error(message);
     throw err;
   }
 }

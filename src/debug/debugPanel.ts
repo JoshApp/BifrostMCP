@@ -76,7 +76,7 @@ export function createDebugPanel(context: vscode.ExtensionContext) {
                 });
                 vscode.window.showInformationMessage('Please open a file in the editor to use this feature');
             }
-        } else if (message.command === 'execute' && BifrostServerManager.getInstance()) {
+        } else if (message.command === 'execute' && BifrostServerManager.getInstance(context)) {
             try {
                 // Create a request handler function that matches our server's handlers
                 const handleRequest = async (request: { params: { name: string; arguments: any } }) => {

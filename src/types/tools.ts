@@ -1,7 +1,7 @@
 import { z, ZodType as ZodSchema } from "zod";
 
 export interface ToolDef<TArgs = any, TResult = any> {
-  id: string; // same as the switch-case name
+  name: string; // same as the switch-case name
   description: string; // human-readable description of the tool's purpose
   schema: ZodSchema<TArgs>; // zod input validator
   run(args: TArgs): Promise<TResult>;

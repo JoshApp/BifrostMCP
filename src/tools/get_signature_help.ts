@@ -43,7 +43,7 @@ export const get_signature_help: ToolDef<
   GetSignatureHelpArgs,
   GetSignatureHelpResult[]
 > = {
-  id: "get_signature_help",
+  name: "get_signature_help",
   description:
     "Provides detailed information about function signatures as you type function calls.",
   schema: z.object({

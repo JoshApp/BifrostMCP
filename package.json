@@ -32,19 +32,27 @@
     "commands": [
       {
         "command": "bifrost-mcp.startServer",
-        "title": "Bifrost MCP: Start Server"
+        "title": "Bifrost MCP: Start Server",
+        "category": "Bifrost MCP",
+        "description": "Start the MCP server with default configuration"
       },
       {
         "command": "bifrost-mcp.startServerOnPort",
-        "title": "Bifrost MCP: Start Server on Port"
+        "title": "Bifrost MCP: Start Server on Port...",
+        "category": "Bifrost MCP",
+        "description": "Start the MCP server on a specific port"
       },
       {
         "command": "bifrost-mcp.stopServer",
-        "title": "Bifrost MCP: Stop Server"
+        "title": "Bifrost MCP: Stop Server",
+        "category": "Bifrost MCP",
+        "description": "Stop the running MCP server"
       },
       {
         "command": "bifrost-mcp.openDebugPanel",
-        "title": "Bifrost MCP: Open Debug Panel"
+        "title": "Bifrost MCP: Open Debug Panel",
+        "category": "Bifrost MCP",
+        "description": "Open the MCP server debug panel to monitor connections and tool usage"
       }
     ]
   },
@@ -84,6 +92,7 @@
     "@types/express": "^5.0.0",
     "cors": "^2.8.5",
     "express": "^5.0.1",
+    "json-schema-to-zod": "^2.6.1",
     "zod-to-json-schema": "^3.24.5"
   }
 }
