@@ -150,3 +150,94 @@ log.debug(JSON.stringify(toolsDescriptions, null, 2));
 log.info("");
 
 export type RunToolResult = Awaited<ReturnType<typeof runTool>>;
+
+export interface ToolUiDescriptor {
+  id: string;               // "get_hover_info"
+  label: string;            // human readable, start case
+  description: string;
+  inputs: {
+    key: string;            // "textDocument.uri" or "line"
+    type: "uri" | "number" | "string" | "textarea";
+    required: boolean;
+    placeholder?: string;
+    label: string;
+  }[];
+}
+
+function unwrap(s: z.ZodTypeAny): z.ZodTypeAny {
+  return s.isOptional() || s.isNullable() ? (s as any)._def.innerType : s;
+}
+
+function gather(shape: z.ZodRawShape, prefix = ''): ToolUiDescriptor['inputs'] {
+  return Object.entries(shape).flatMap(([k, v]) => {
+    const key = prefix ? `${prefix}.${k}` : k;
+    const inner = unwrap(v);
+    if (inner instanceof z.ZodObject) {
+      return gather(inner.shape, key);
+    }
+    return [{
+      key,
+      type: determineInputType(inner),
+      required: !v.isOptional(),
+      placeholder: getPlaceholder(key),
+      label: key.split('.').pop()?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || key
+    }];
+  });
+}
+
+export function getToolUiDescriptors(): ToolUiDescriptor[] {
+  return tools.map(tool => {
+    const base = tool.schema instanceof z.ZodObject ? tool.schema : undefined;
+    const inputs = base ? gather(base.shape) : [];
+
+    return {
+      id: tool.name,
+      label: tool.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      description: tool.description.split('.')[0],
+      inputs
+    };
+  });
+}
+
+function determineInputType(schema: z.ZodType<any>): "uri" | "number" | "string" | "textarea" {
+  if (schema instanceof z.ZodString) {
+    // Check for URI patterns in the key or description
+    const key = (schema as any)._def?.description || '';
+    if (key.toLowerCase().includes('uri') || key.endsWith('.uri')) {
+      return 'uri';
+    }
+    return 'string';
+  }
+  if (schema instanceof z.ZodNumber) {
+    return 'number';
+  }
+  if (schema instanceof z.ZodEnum) {
+    return 'string'; // TODO: Could be enhanced to support dropdowns
+  }
+  return 'textarea';
+}
+
+function getPlaceholder(key: string): string {
+  if (key.endsWith('.uri')) {
+    return 'Start typing to search files...';
+  }
+  if (key === 'line') {
+    return 'Line number';
+  }
+  if (key === 'character') {
+    return 'Character';
+  }
+  if (key === 'newName') {
+    return 'New name';
+  }
+  if (key === 'query') {
+    return 'Search symbols...';
+  }
+  if (key === 'triggerCharacter') {
+    return 'Trigger character';
+  }
+  if (key.includes('number') || key.includes('line') || key.includes('character')) {
+    return 'Enter a number';
+  }
+  return 'Enter text';
+}

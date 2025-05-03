@@ -1,0 +1,148 @@
+/* ==== Layout ==== */
+body{
+  padding:20px;
+  font-family:var(--vscode-font-family);
+  color:var(--vscode-foreground);
+}
+
+#tools{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+  gap:16px;
+}
+
+/* ==== Tool card ==== */
+.tool{
+  border:1px solid var(--vscode-panel-border);
+  border-radius:6px;
+  padding:16px;
+  background:var(--vscode-editor-background);
+  display:flex;
+  flex-direction:column;
+}
+
+.tool h3{
+  margin:0 0 6px 0;
+  font-size:1.1rem;
+}
+
+.tool p{
+  margin:0 0 12px 0;
+  color:var(--vscode-descriptionForeground);
+  font-size:.9rem;
+}
+
+/* ==== Inputs ==== */
+.tool input[type="text"],
+.tool input[type="number"],
+.tool textarea{
+  width:100%;
+  padding:6px 8px;
+  margin-top:6px;
+  background:var(--vscode-input-background);
+  color:var(--vscode-input-foreground);
+  border:1px solid var(--vscode-input-border);
+  border-radius:3px;
+  box-sizing:border-box;
+  resize:vertical;
+}
+
+.autocomplete{
+  position:relative;
+}
+
+.autocomplete-list{
+  position:absolute;
+  top:100%;
+  left:0;
+  right:0;
+  z-index:10;
+  max-height:180px;
+  overflow-y:auto;
+  border:1px solid var(--vscode-input-border);
+  background:var(--vscode-input-background);
+}
+
+.autocomplete-item{
+  padding:6px 10px;
+  cursor:pointer;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected{
+  background:var(--vscode-list-hoverBackground);
+}
+
+/* ==== Button ==== */
+.tool button{
+  align-self:flex-start;
+  margin-top:12px;
+  padding:6px 12px;
+  border:none;
+  background:var(--vscode-button-background);
+  color:var(--vscode-button-foreground);
+  cursor:pointer;
+  border-radius:3px;
+}
+
+.tool button:hover{
+  background:var(--vscode-button-hoverBackground);
+}
+
+/* ==== Result panel ==== */
+.tool pre{
+  margin-top:12px;
+  padding:10px;
+  background:var(--vscode-textCodeBlock-background);
+  font-family:var(--vscode-editor-font-family);
+  font-size:.8rem;
+  overflow-x:auto;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+
+.success{
+  color:var(--vscode-terminal-ansiGreen);
+}
+.error{
+  color:var(--vscode-errorForeground);
+}
+
+.input-group {
+  margin-bottom: 1rem;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: var(--vscode-foreground);
+}
+
+.input-group input,
+.input-group textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--vscode-input-border);
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border-radius: 2px;
+}
+
+.input-group textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.input-group input:focus,
+.input-group textarea:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.input-group .autocomplete {
+  position: relative;
+}
+
+.input-group .autocomplete input {
+  padding-right: 2.5rem;
+} 

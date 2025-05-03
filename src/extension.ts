@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { BifrostServerManager } from "./BifrostServerManager";
-import { createDebugPanel } from "./debug/debugPanel";
+import { DebugPanel } from "./debug/debugPanel";
 import { findBifrostConfig } from "./core/config";
 import { getPrimaryWorkspaceFolder } from "./utils/workspace";
 import { Log } from "./core/log";
@@ -37,10 +37,17 @@ export async function activate(extensionContext: vscode.ExtensionContext) {
     const debugPanelCommand = vscode.commands.registerCommand(
       "bifrost-mcp.openDebugPanel",
       () => {
-        createDebugPanel(extensionContext);
+        DebugPanel.open(extensionContext);
       }
     );
     subscriptions.push(debugPanelCommand);
+
+    // Register WebviewPanelSerializer for mcpDebug
+    vscode.window.registerWebviewPanelSerializer('mcpDebug', {
+      async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: any) {
+        DebugPanel.revive(panel, extensionContext);
+      }
+    });
 
     // Register server control commands
     const startServerCommand = vscode.commands.registerCommand(

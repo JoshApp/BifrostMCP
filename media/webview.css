@@ -1,0 +1,85 @@
+body { 
+    padding: 20px;
+    font-family: var(--vscode-font-family);
+    color: var(--vscode-foreground);
+}
+.tool-section {
+    margin-bottom: 20px;
+    padding: 10px;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+}
+.tool-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+input, button {
+    margin: 5px 0;
+    padding: 5px;
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+}
+button {
+    cursor: pointer;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 8px 12px;
+    border-radius: 2px;
+}
+button:hover {
+    background: var(--vscode-button-hoverBackground);
+}
+pre {
+    background: var(--vscode-textCodeBlock-background);
+    padding: 10px;
+    overflow-x: auto;
+    margin-top: 10px;
+    color: var(--vscode-foreground);
+}
+.error-message {
+    color: #ff4444;
+    background-color: #fff0f0;
+    border-left: 3px solid #ff4444;
+    padding: 8px;
+    margin: 4px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.success-message {
+    color: var(--vscode-terminal-ansiGreen);
+}
+.autocomplete-container {
+    position: relative;
+    width: 100%;
+}
+.autocomplete-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+    z-index: 1000;
+    display: none;
+}
+.autocomplete-item {
+    padding: 5px 10px;
+    cursor: pointer;
+}
+.autocomplete-item:hover {
+    background: var(--vscode-list-hoverBackground);
+}
+.autocomplete-item.selected {
+    background: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+}
+.current-file-button {
+    margin-left: 5px;
+}
+.tool-inputs {
+    margin: 10px 0;
+} 
