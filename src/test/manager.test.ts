@@ -10,7 +10,7 @@ import {
   beforeEach,
   afterEach,
 } from "@jest/globals";
-import { BifrostConfig } from "../core/config";
+import { BifrostConfig } from "../core/configService";
 
 // Mock vscode
 jest.mock("vscode", () => ({

@@ -156,7 +156,10 @@ export class DebugPanel {
     // Handle messages from the webview
     panel.webview.onDidReceiveMessage(
       async (message: WebviewToExtensionMessage) => {
-        log.debug(`Webview -> Extension: ${JSON.stringify(message)}`);
+        // Only log non-autocomplete related messages
+        if (message.command !== "getCurrentFile") {
+          log.debug(`Webview -> Extension: ${JSON.stringify(message)}`);
+        }
         if (message.command === "getCurrentFile") {
           const editor = vscode.window.activeTextEditor;
           if (editor) {
@@ -166,7 +169,6 @@ export class DebugPanel {
               tool: message.tool,
               uri: uri.toString(),
             };
-            log.debug(`Extension -> Webview: ${JSON.stringify(msg)}`);
             panel?.webview.postMessage(msg);
           } else {
             const msg: ExtensionToWebviewMessage = {
@@ -174,7 +176,6 @@ export class DebugPanel {
               tool: message.tool,
               error: "No active editor found",
             };
-            log.debug(`Extension -> Webview: ${JSON.stringify(msg)}`);
             panel?.webview.postMessage(msg);
             vscode.window.showInformationMessage(
               "Please open a file in the editor to use this feature"
@@ -215,7 +216,6 @@ export class DebugPanel {
         type: "files",
         files: this.fileList,
       };
-      log.debug(`Extension -> Webview: ${JSON.stringify(msg)}`);
       panel?.webview.postMessage(msg);
     });
 
@@ -231,7 +231,6 @@ export class DebugPanel {
           type: "fileAdd",
           file: fileInfo,
         };
-        log.debug(`Extension -> Webview: ${JSON.stringify(msg)}`);
         panel?.webview.postMessage(msg);
       }
     });
@@ -244,7 +243,6 @@ export class DebugPanel {
           type: "fileRemove",
           file: fileInfo,
         };
-        log.debug(`Extension -> Webview: ${JSON.stringify(msg)}`);
         panel?.webview.postMessage(msg);
       }
     });

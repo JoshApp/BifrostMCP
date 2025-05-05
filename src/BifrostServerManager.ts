@@ -13,11 +13,8 @@ import type { Server as HttpServer } from "http";
 import { Request, Response } from "express";
 import { parsedMcpTools, toolMap } from "./toolManager";
 import { runTool } from "./toolManager";
-import {
-  BifrostConfig,
-  getProjectBasePath,
-  findBifrostConfig,
-} from "./core/config";
+import { BifrostConfig } from "./core/configService";
+import { ConfigService } from "./core/configService";
 import { Log } from "./core/log";
 import { z } from "zod";
 
@@ -29,11 +26,9 @@ export class BifrostServerManager {
   private app?: express.Application;
   private keepAliveIntervals = new Map<string, NodeJS.Timeout>();
   private log: Log;
-  private configWatchers: vscode.FileSystemWatcher[] = [];
   private statusBarItem: vscode.StatusBarItem;
   private starting?: Promise<void>;
-  private currentConfig?: BifrostConfig;
-  private restartTimeouts = new Map<string, NodeJS.Timeout>();
+  private configService: ConfigService;
 
   // Cross-platform timing function
   private readonly now =
@@ -49,6 +44,7 @@ export class BifrostServerManager {
     });
 
     this.log = Log.getInstance();
+    this.configService = ConfigService.getInstance(context);
 
     // Create status bar item
     this.statusBarItem = vscode.window.createStatusBarItem(
@@ -96,58 +92,156 @@ export class BifrostServerManager {
     }
   }
 
-  private async handleConfigChange(
-    folder: vscode.WorkspaceFolder,
-    uri: vscode.Uri
-  ): Promise<void> {
-    const key = folder.uri.toString();
+  public async initialize(): Promise<BifrostServerManager> {
+    await this.configService.initialize();
 
-    // Clear any existing timeout for this folder
-    const existingTimeout = this.restartTimeouts.get(key);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
+    // Subscribe to config changes
+    this.context.subscriptions.push(
+      this.configService.onConfigChange(async (config) => {
+        await this.restart(config);
+      })
+    );
+
+    // Start server if we have a config
+    const initialConfig = this.configService.getConfig();
+    if (initialConfig) {
+      await this.start(initialConfig);
     }
 
-    // Set a new timeout for restart
-    const timeout = setTimeout(async () => {
+    return this;
+  }
+
+  private async setupMcpServer(cfg: BifrostConfig): Promise<void> {
+    // Create MCP Server
+    this.mcp = new Server(
+      {
+        name: cfg.projectName,
+        version: "0.1.0",
+        description: cfg.description,
+      },
+      {
+        capabilities: {
+          tools: {},
+          resources: {},
+        },
+      }
+    );
+
+    // Set up MCP handlers
+    this.mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: parsedMcpTools,
+    }));
+
+    this.mcp.setRequestHandler(ListResourcesRequestSchema, async () => ({
+      resources: [],
+    }));
+
+    this.mcp.setRequestHandler(
+      ListResourceTemplatesRequestSchema,
+      async () => ({
+        templates: [],
+      })
+    );
+
+    this.mcp.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+      this.log.debug(
+        `Calling tool: ${name} with args: ${JSON.stringify(args)}`
+      );
+
+      const tool = parsedMcpTools.find((t) => t.name === name);
+      if (!tool) {
+        this.log.error(`Tool "${name}" not found`);
+        return {
+          content: [{ type: "text", text: `Tool "${name}" not found` }],
+          isError: true,
+        };
+      }
+
+      const parsedArgs = toolMap.get(name)?.schema.safeParse(args);
+      if (!parsedArgs?.success) {
+        this.log.error(
+          `Invalid arguments: ${JSON.stringify(
+            parsedArgs?.error?.format()
+          )}`
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(parsedArgs?.error?.format(), null, 2),
+            },
+          ],
+          isError: true,
+        };
+      }
+
       try {
-        // Check if the file still exists
-        try {
-          await vscode.workspace.fs.stat(uri);
-        } catch {
-          this.log.info(`Config file deleted: ${uri.fsPath}`);
-          this.currentConfig = undefined;
-          this.restartTimeouts.delete(key);
-          await this.stop();
-          return;
-        }
-
-        // Get the new config
-        const newCfg = await findBifrostConfig(folder);
-
-        // Skip restart if the config hasn't changed
-        if (
-          this.currentConfig &&
-          JSON.stringify(newCfg) === JSON.stringify(this.currentConfig)
-        ) {
-          this.log.info(`Config file changed but content is identical`);
-          return;
-        }
-
-        this.log.info(`Config file changed: ${uri.fsPath}`);
-        await this.restart(newCfg);
+        this.log.debug(`Running tool: ${name}`);
+        const result = await this.runTool(name, parsedArgs.data);
+        this.log.debug(`Tool ${name} completed successfully`);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+        };
       } catch (error) {
         this.log.error(
-          `Error handling config change: ${
+          `Tool ${name} failed: ${
             error instanceof Error ? error.message : String(error)
           }`
         );
-      } finally {
-        this.restartTimeouts.delete(key);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text", text: `Error: ${errorMessage}` }],
+          isError: true,
+        };
       }
-    }, 250);
+    });
+  }
 
-    this.restartTimeouts.set(key, timeout);
+  private async setupHttpServer(cfg: BifrostConfig): Promise<void> {
+    const basePath = ConfigService.formatBasePath(cfg);
+    this.app = this.buildApp(basePath, cfg);
+
+    try {
+      this.http = this.app.listen(cfg.port);
+      const message = `MCP server listening on http://localhost:${cfg.port}${basePath}`;
+      vscode.window.showInformationMessage(message);
+      this.log.info(message);
+      this.updateStatusBar(true);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+        const newPort = await vscode.window.showInputBox({
+          prompt: `Port ${cfg.port} is already in use. Please enter a new port number or press Enter to abort:`,
+          value: String(cfg.port + 1),
+          validateInput: (value) => {
+            const port = parseInt(value);
+            if (isNaN(port) || port < 1 || port > 65535) {
+              return "Please enter a valid port number between 1 and 65535";
+            }
+            return null;
+          },
+        });
+
+        if (!newPort) {
+          this.log.info("Server start aborted by user");
+          return;
+        }
+
+        // Try again with new port in local config
+        cfg.port = parseInt(newPort);
+        await this.setupHttpServer(cfg);
+        return;
+      }
+
+      const errorMsg =
+        error instanceof Error ? error.message : String(error);
+      const fullError = `Failed to start server on configured port ${cfg.port}${basePath}. Please check if the port is available or configure a different port in bifrost.config.json. Error: ${errorMsg}`;
+      vscode.window.showErrorMessage(fullError);
+      this.log.error(fullError);
+      this.updateStatusBar(false);
+      throw new Error(fullError);
+    }
   }
 
   public async start(cfg: BifrostConfig): Promise<void> {
@@ -168,158 +262,9 @@ export class BifrostServerManager {
 
         await this.stop(); // Ensure clean state
 
-        // Create a local copy of the config to avoid mutating the caller's object
-        const localConfig = { ...cfg };
-        this.currentConfig = localConfig;
-
-        // Set up config file watchers for each workspace folder
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders) {
-          // Create a watcher for each workspace folder
-          for (const folder of workspaceFolders) {
-            const watcher = vscode.workspace.createFileSystemWatcher(
-              new vscode.RelativePattern(folder, "**/bifrost.config.json")
-            );
-
-            // Handle all file events
-            watcher.onDidChange((uri) => this.handleConfigChange(folder, uri));
-            watcher.onDidCreate((uri) => this.handleConfigChange(folder, uri));
-            watcher.onDidDelete((uri) => this.handleConfigChange(folder, uri));
-
-            this.configWatchers.push(watcher);
-            this.context.subscriptions.push(watcher);
-          }
-        }
-
-        // Create MCP Server
-        this.mcp = new Server(
-          {
-            name: localConfig.projectName,
-            version: "0.1.0",
-            description: localConfig.description,
-          },
-          {
-            capabilities: {
-              tools: {},
-              resources: {},
-            },
-          }
-        );
-
-        // Set up MCP handlers
-        this.mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-          tools: parsedMcpTools,
-        }));
-
-        this.mcp.setRequestHandler(ListResourcesRequestSchema, async () => ({
-          resources: [],
-        }));
-
-        this.mcp.setRequestHandler(
-          ListResourceTemplatesRequestSchema,
-          async () => ({
-            templates: [],
-          })
-        );
-
-        this.mcp.setRequestHandler(CallToolRequestSchema, async (request) => {
-          const { name, arguments: args } = request.params;
-          this.log.debug(
-            `Calling tool: ${name} with args: ${JSON.stringify(args)}`
-          );
-
-          const tool = parsedMcpTools.find((t) => t.name === name);
-          if (!tool) {
-            this.log.error(`Tool "${name}" not found`);
-            return {
-              content: [{ type: "text", text: `Tool "${name}" not found` }],
-              isError: true,
-            };
-          }
-
-          const parsedArgs = toolMap.get(name)?.schema.safeParse(args);
-          if (!parsedArgs?.success) {
-            this.log.error(
-              `Invalid arguments: ${JSON.stringify(
-                parsedArgs?.error?.format()
-              )}`
-            );
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(parsedArgs?.error?.format(), null, 2),
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          try {
-            this.log.debug(`Running tool: ${name}`);
-            const result = await this.runTool(name, parsedArgs.data);
-            this.log.debug(`Tool ${name} completed successfully`);
-            return {
-              content: [{ type: "text", text: JSON.stringify(result) }],
-            };
-          } catch (error) {
-            this.log.error(
-              `Tool ${name} failed: ${
-                error instanceof Error ? error.message : String(error)
-              }`
-            );
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            return {
-              content: [{ type: "text", text: `Error: ${errorMessage}` }],
-              isError: true,
-            };
-          }
-        });
-
-        const basePath = getProjectBasePath(localConfig);
-        this.app = this.buildApp(basePath, localConfig);
-
-        try {
-          this.http = this.app.listen(localConfig.port);
-          const message = `MCP server listening on http://localhost:${localConfig.port}${basePath}`;
-          vscode.window.showInformationMessage(message);
-          this.log.info(message);
-          this.updateStatusBar(true);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
-            const newPort = await vscode.window.showInputBox({
-              prompt: `Port ${localConfig.port} is already in use. Please enter a new port number or press Enter to abort:`,
-              value: String(localConfig.port + 1),
-              validateInput: (value) => {
-                const port = parseInt(value);
-                if (isNaN(port) || port < 1 || port > 65535) {
-                  return "Please enter a valid port number between 1 and 65535";
-                }
-                return null;
-              },
-            });
-
-            if (!newPort) {
-              this.log.info("Server start aborted by user");
-              return;
-            }
-
-            // Try again with new port in local config
-            localConfig.port = parseInt(newPort);
-            return this.start(localConfig);
-          }
-
-          const errorMsg =
-            error instanceof Error ? error.message : String(error);
-          const fullError = `Failed to start server on configured port ${localConfig.port}${basePath}. Please check if the port is available or configure a different port in bifrost.config.json. Error: ${errorMsg}`;
-          vscode.window.showErrorMessage(fullError);
-          this.log.error(fullError);
-          this.updateStatusBar(false);
-          throw new Error(fullError);
-        }
+        await this.setupMcpServer(cfg);
+        await this.setupHttpServer(cfg);
       } finally {
-        // Clear the starting promise when done
         this.starting = undefined;
       }
     })();
@@ -328,18 +273,6 @@ export class BifrostServerManager {
   }
 
   public async stop(): Promise<void> {
-    // Clear all restart timeouts
-    for (const timeout of this.restartTimeouts.values()) {
-      clearTimeout(timeout);
-    }
-    this.restartTimeouts.clear();
-
-    // Dispose all config watchers
-    for (const watcher of this.configWatchers) {
-      watcher.dispose();
-    }
-    this.configWatchers = [] as vscode.FileSystemWatcher[];
-
     if (this.mcp) {
       this.mcp.close();
       this.mcp = undefined;
@@ -353,7 +286,6 @@ export class BifrostServerManager {
     }
 
     this.app = undefined;
-    this.currentConfig = undefined;
 
     // Clear all keep-alive intervals
     for (const [sessionId, interval] of this.keepAliveIntervals.entries()) {
@@ -536,40 +468,21 @@ export class BifrostServerManager {
       throw new Error(`Tool "${name}" not found`);
     }
 
-    const startTime = this.now();
     try {
       // Run the tool directly - validation will happen in toolManager.runTool()
-      const toolResult = await runTool(name, args);
-      const duration = this.now() - startTime;
-
-      // Log performance metrics
-      this.log.info(`Tool "${name}" completed in ${duration.toFixed(2)}ms`);
-
-      // Return result with performance metrics
-      return {
-        result: toolResult,
-        metrics: {
-          duration: duration,
-          tool: name,
-        },
-      };
+      const { result } = await runTool(name, args);
+      return result;
     } catch (error) {
-      const duration = this.now() - startTime;
-
       // Format ZodError as pretty JSON in a markdown code block
       if (error instanceof z.ZodError) {
         const errorMessage =
           "```json\n" + JSON.stringify(error.format(), null, 2) + "\n```";
-        this.log.error(
-          `Tool "${name}" failed after ${duration.toFixed(
-            2
-          )}ms: ${errorMessage}`
-        );
+        this.log.error(`Tool "${name}" failed: ${errorMessage}`);
         throw new Error(errorMessage);
       }
 
       this.log.error(
-        `Tool "${name}" failed after ${duration.toFixed(2)}ms: ${
+        `Tool "${name}" failed: ${
           error instanceof Error ? error.message : String(error)
         }`
       );

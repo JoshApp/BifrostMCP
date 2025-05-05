@@ -1,9 +1,8 @@
 import * as vscode from "vscode";
 import { BifrostServerManager } from "./BifrostServerManager";
-import { DebugPanel } from "./debug/debugPanel";
-import { findBifrostConfig } from "./core/config";
-import { getPrimaryWorkspaceFolder } from "./utils/workspace";
 import { Log } from "./core/log";
+import { registerServerCommands } from "./commands/serverCommands";
+import { registerDebugCommands } from "./commands/debugCommands";
 
 export async function activate(extensionContext: vscode.ExtensionContext) {
   let serverManager: BifrostServerManager | undefined;
@@ -12,74 +11,13 @@ export async function activate(extensionContext: vscode.ExtensionContext) {
 
   try {
     // Initialize the server manager with context
-    serverManager = BifrostServerManager.getInstance(extensionContext);
+    serverManager = await BifrostServerManager.getInstance(extensionContext).initialize();
 
-    // Handle workspace folder changes
-    const workspaceChangeSubscription =
-      vscode.workspace.onDidChangeWorkspaceFolders(async () => {
-        const workspaceFolder = getPrimaryWorkspaceFolder();
-        if (!workspaceFolder) {
-          return;
-        }
-        const config = await findBifrostConfig(workspaceFolder);
-        await serverManager?.restart(config!);
-      });
-    subscriptions.push(workspaceChangeSubscription);
-
-    // Initial server start
-    const workspaceFolder = getPrimaryWorkspaceFolder();
-    if (workspaceFolder) {
-      const config = await findBifrostConfig(workspaceFolder);
-      await serverManager.start(config!);
+    // Register all commands
+    subscriptions.push(...registerDebugCommands(extensionContext));
+    if (serverManager) {
+      subscriptions.push(...registerServerCommands(extensionContext, serverManager));
     }
-
-    // Register debug panel command
-    const debugPanelCommand = vscode.commands.registerCommand(
-      "bifrost-mcp.openDebugPanel",
-      () => {
-        DebugPanel.open(extensionContext);
-      }
-    );
-    subscriptions.push(debugPanelCommand);
-
-    // Register WebviewPanelSerializer for mcpDebug
-    vscode.window.registerWebviewPanelSerializer('mcpDebug', {
-      async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: any) {
-        DebugPanel.revive(panel, extensionContext);
-      }
-    });
-
-    // Register server control commands
-    const startServerCommand = vscode.commands.registerCommand(
-      "bifrost-mcp.startServer",
-      async () => {
-        try {
-          const workspaceFolder = getPrimaryWorkspaceFolder();
-          if (!workspaceFolder) {
-            return;
-          }
-          const config = await findBifrostConfig(workspaceFolder);
-          await serverManager?.start(config!);
-        } catch (error) {
-          const errorMsg =
-            error instanceof Error ? error.message : String(error);
-          vscode.window.showErrorMessage(
-            `Failed to start MCP server: ${errorMsg}`
-          );
-          log.error(`Failed to start MCP server: ${errorMsg}`);
-        }
-      }
-    );
-    subscriptions.push(startServerCommand);
-
-    const stopServerCommand = vscode.commands.registerCommand(
-      "bifrost-mcp.stopServer",
-      async () => {
-        await serverManager?.stop();
-        vscode.window.showInformationMessage("MCP server stopped");
-      }
-    );
-    subscriptions.push(stopServerCommand);
 
     // Add all subscriptions to the extension context
     subscriptions.forEach((sub) => extensionContext.subscriptions.push(sub));

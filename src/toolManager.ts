@@ -66,40 +66,74 @@ export const toolsDescriptions: ToolDescription[] = parsedMcpTools.map(
   })
 );
 
+// Cross-platform timing function
+const now = globalThis.performance?.now?.bind(globalThis.performance) ?? Date.now;
+
+// Define the return type for runTool
+export interface ToolResult<T> {
+  result: T;
+  metrics: {
+    duration: number;
+    tool: string;
+  };
+}
+
+interface TextDocumentArgs {
+  textDocument: {
+    uri: string;
+  };
+}
+
 // Tool execution
-export async function runTool(name: string, args: unknown) {
-  const tool = toolMap.get(name);
-  if (!tool) {
-    log.error(`Tool "${name}" not found`);
-    throw new Error(`Unknown tool: ${name}`);
-  }
-
-  log.debug(`Running tool ${name} with args: ${JSON.stringify(args)}`);
-  const parsed = (tool.schema as z.Schema<any>).parse(args);
-
-  // Validate file existence if the tool requires a text document
-  if (
-    parsed &&
-    typeof parsed === "object" &&
-    "textDocument" in parsed &&
-    parsed.textDocument?.uri
-  ) {
-    const uri = vscode.Uri.parse(parsed.textDocument.uri);
-    try {
-      await vscode.workspace.fs.stat(uri);
-    } catch {
-      log.error(`File not found: ${uri.fsPath}`);
-      throw new Error(`File not found: ${uri.fsPath}`);
-    }
-  }
-
+export async function runTool<TArgs, TResult>(
+  name: string,
+  args: unknown
+): Promise<ToolResult<TResult>> {
+  const startTime = now();
   try {
+    const tool = toolMap.get(name);
+    if (!tool) {
+      throw new Error(`Tool "${name}" not found`);
+    }
+
+    log.debug(`Running tool ${name} with args: ${JSON.stringify(args)}`);
+    const parsed = (tool.schema as z.Schema<TArgs>).parse(args);
+
+    // Validate file existence if the tool requires a text document
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "textDocument" in parsed &&
+      (parsed as TextDocumentArgs).textDocument?.uri
+    ) {
+      const uri = vscode.Uri.parse((parsed as TextDocumentArgs).textDocument.uri);
+      try {
+        await vscode.workspace.fs.stat(uri);
+      } catch {
+        log.error(`File not found: ${uri.fsPath}`);
+        throw new Error(`File not found: ${uri.fsPath}`);
+      }
+    }
+
     const result = await tool.run(parsed);
+    const duration = now() - startTime;
+
+    // Log performance metrics
+    log.info(`Tool "${name}" completed in ${duration.toFixed(2)}ms`);
     log.debug(`Tool ${name} completed with result: ${JSON.stringify(result)}`);
-    return result;
+
+    // Return result with performance metrics
+    return {
+      result,
+      metrics: {
+        duration,
+        tool: name,
+      },
+    };
   } catch (error) {
+    const duration = now() - startTime;
     log.error(
-      `Tool ${name} failed: ${
+      `Tool "${name}" failed after ${duration.toFixed(2)}ms: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
